@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mini GDrive</title>
+  <script src="react.development.js"></script>
+  <script src="react-dom.development.js"></script>
+  <script src="bootstrap.bundle.min.js"></script>
+  <script src="babel.min.js"></script>
+  <link rel="stylesheet" href="bootstrap.min.css">
+  <style>
+    .tree-indent {
+      padding-left: 20px;
+    }
+    .folder-icon {
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <script type="text/babel">
+    const root = ReactDOM.createRoot(document.getElementById("app"));
+
+    function App() {
+      const [rootFolders, setRootFolders] = React.useState([]);
+
+      function addItem(newItem, parentId = null) {
+        if (!parentId) {
+          setRootFolders([...rootFolders, newItem]);
+        } else {
+          const updated = addItemToTree([...rootFolders], newItem, parentId);
+          setRootFolders(updated);
+        }
+      }
+
+      function addItemToTree(tree, newItem, parentId) {
+        return tree.map(item => {
+          if (item.id === parentId && item.isFolder) {
+            return {
+              ...item,
+              children: [...item.children, newItem]
+            };
+          } else if (item.isFolder) {
+            return {
+              ...item,
+              children: addItemToTree(item.children, newItem, parentId)
+            };
+          }
+          return item;
+        });
+      }
+
+      function deleteItemFromTree(tree, id) {
+        return tree.filter(item => item.id !== id).map(item => {
+          if (item.isFolder) {
+            return {
+              ...item,
+              children: deleteItemFromTree(item.children, id)
+            };
+          }
+          return item;
+        });
+      }
+
+      function handleDelete(id) {
+        setRootFolders(deleteItemFromTree(rootFolders, id));
+      }
+
+      function updateItemInTree(tree, updatedItem) {
+        return tree.map(item => {
+          if (item.id === updatedItem.id) {
+            return { ...item, ...updatedItem };
+          } else if (item.isFolder) {
+            return {
+              ...item,
+              children: updateItemInTree(item.children, updatedItem)
+            };
+          }
+          return item;
+        });
+      }
+
+      function handleUpdate(updatedItem) {
+        const updatedTree = updateItemInTree(rootFolders, updatedItem);
+        setRootFolders(updatedTree);
+      }
+
+      return (
+        <div className="container mt-4">
+          <div className="card shadow-lg">
+            <div className="card-header bg-primary text-white text-center">
+              <h4>Mini GDrive</h4>
+            </div>
+            <div className="card-body">
+              <AppForm onAdd={addItem} parentId={null} />
+              <hr />
+              <FolderTree data={rootFolders} onAdd={addItem} onDelete={handleDelete} onUpdate={handleUpdate} />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function AppForm({ onAdd, parentId }) {
+      const [title, setTitle] = React.useState('');
+      const [type, setType] = React.useState('');
+      const [isFolder, setIsFolder] = React.useState(false);
+
+      function handleSubmit(e) {
+        e.preventDefault();
+        const newItem = {
+          id: Date.now(),
+          title,
+          type: isFolder ? 'folder' : type,
+          isFolder,
+          children: isFolder ? [] : undefined
+        };
+        onAdd(newItem, parentId);
+        setTitle('');
+        setType('');
+        setIsFolder(false);
+      }
+
+      return (
+        <form onSubmit={handleSubmit} className="row g-2 align-items-end">
+          <div className="col-md-4">
+            <input
+              type="text"
+              className="form-control"
+              placeholder="Nama File/Folder"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              required
+            />
+          </div>
+          <div className="col-md-3">
+            <select
+              className="form-control"
+              value={type}
+              onChange={(e) => setType(e.target.value)}
+              disabled={isFolder}
+              required={!isFolder}
+            >
+              <option value="">-- Pilih Tipe File --</option>
+              <option value=".jpg">.jpg</option>
+              <option value=".png">.png</option>
+              <option value=".pdf">.pdf</option>
+              <option value=".docx">.docx</option>
+            </select>
+          </div>
+          <div className="col-md-2 form-check">
+            <input
+              className="form-check-input"
+              type="checkbox"
+              checked={isFolder}
+              onChange={() => setIsFolder(!isFolder)}
+              id={"folder-check" + parentId}
+            />
+            <label className="form-check-label" htmlFor={"folder-check" + parentId}>
+              Folder
+            </label>
+          </div>
+          <div className="col-md-3">
+            <button className="btn btn-success w-100">Tambah</button>
+          </div>
+        </form>
+      );
+    }
+
+    function FolderTree({ data, onAdd, onDelete, onUpdate, level = 0 }) {
+      return (
+        <div>
+          {data.map(item => (
+            <FolderItem
+              key={item.id}
+              item={item}
+              onAdd={onAdd}
+              onDelete={onDelete}
+              onUpdate={onUpdate}
+              level={level}
+            />
+          ))}
+        </div>
+      );
+    }
+
+    function FolderItem({ item, onAdd, onDelete, onUpdate, level }) {
+      const [expanded, setExpanded] = React.useState(false);
+      const [isEditing, setIsEditing] = React.useState(false);
+      const [editTitle, setEditTitle] = React.useState(item.title);
+      const [editType, setEditType] = React.useState(item.type);
+
+      function handleEditSubmit(e) {
+        e.preventDefault();
+        const updatedItem = {
+          ...item,
+          title: editTitle,
+          type: item.isFolder ? 'folder' : editType
+        };
+        onUpdate(updatedItem);
+        setIsEditing(false);
+      }
+
+      return (
+        <div className="mb-2">
+          <div className={`d-flex justify-content-between align-items-center tree-indent`} style={{ paddingLeft: level * 20 + 'px' }}>
+            {isEditing ? (
+              <form className="d-flex w-100 gap-2" onSubmit={handleEditSubmit}>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  required
+                />
+                {!item.isFolder && (
+                  <select
+                    className="form-control"
+                    value={editType}
+                    onChange={(e) => setEditType(e.target.value)}
+                    required
+                  >
+                    <option value=".jpg">.jpg</option>
+                    <option value=".png">.png</option>
+                    <option value=".pdf">.pdf</option>
+                    <option value=".docx">.docx</option>
+                  </select>
+                )}
+                <button className="btn btn-primary btn-sm" type="submit">Simpan</button>
+                <button className="btn btn-secondary btn-sm" type="button" onClick={() => setIsEditing(false)}>Batal</button>
+              </form>
+            ) : (
+              <>
+                <div className="d-flex align-items-center">
+                  <span
+                    className="me-2 folder-icon"
+                    onClick={() => item.isFolder && setExpanded(!expanded)}
+                  >
+                    {item.isFolder ? (expanded ? "📂" : "📁") : "📄"}
+                  </span>
+                  <span>{item.title}</span>
+                  {!item.isFolder && <span className="badge bg-secondary ms-2">{item.type}</span>}
+                </div>
+                <div>
+                  <button className="btn btn-sm btn-warning me-1" onClick={() => setIsEditing(true)}>Edit</button>
+                  <button className="btn btn-sm btn-danger" onClick={() => onDelete(item.id)}>Hapus</button>
+                </div>
+              </>
+            )}
+          </div>
+          {item.isFolder && expanded && (
+            <div className="ms-3">
+              <AppForm onAdd={onAdd} parentId={item.id} />
+              <FolderTree data={item.children} onAdd={onAdd} onDelete={onDelete} onUpdate={onUpdate} level={level + 1} />
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    root.render(<App />);
+  </script>
+</body>
+</html>
